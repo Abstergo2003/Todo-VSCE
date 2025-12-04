@@ -1,0 +1,66 @@
+{
+  "name": "abstergoodos",
+  "displayName": "Todos##",
+  "description": "Best way to save and view your todos",
+  "version": "1.6.0",
+  "engines": {
+    "vscode": "^1.106.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "publisher": "Abstergo",
+  "icon": "icon.png",
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abstergo2003/VS-Code-Extensions.git",
+    "directory": "todos"
+  },
+  "contributes": {
+    "views": {
+      "myTODOContainer": [
+        {
+          "id": "myTodoView",
+          "name": "TODO View",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "myTODOContainer",
+          "title": "TODO Panel",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "myExtension.searchTodos",
+        "title": "Search @TODO in Workspace"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.106.0",
+    "@types/mocha": "^10.0.8",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.7.0",
+    "@typescript-eslint/parser": "^8.7.0",
+    "eslint": "^9.11.1",
+    "typescript": "^5.6.2",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
