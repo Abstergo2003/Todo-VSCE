@@ -2,15 +2,15 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 
-// 1. Defined valid types
-type TodoType = "TODO" | "FIX" | "ADD" | "REMOVE";
+type TodoType = "feat" | "fix" | "docs" | "style" | "refactor" | "test" | "chore" | "perf" | "ci" | "build";
 
 interface TodoItem {
     fileUri: vscode.Uri;
     line: number;
     text: string;
     important: boolean;
-    type: TodoType; // 2. Added type property
+    type: TodoType;
+    scope?: string;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -26,8 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((e) => {
             const text = e.document.getText();
-            // 3. Updated quick check to include new keywords
-            if (/(TODO|FIX|ADD|REMOVE)/.test(text)) {
+            if (/\b(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(?:\([^)]+\))?(!?)::/.test(text)) {
                 todoProvider.refresh();
             }
         })
@@ -85,8 +84,7 @@ async function findTodosInWorkspace(): Promise<TodoItem[]> {
     const files = await vscode.workspace.findFiles("**/*", ignoreGlob ?? "**/node_modules/**");
     const results: TodoItem[] = [];
 
-    // Captures the Keyword (Group 1) and the Optional Exclamation (Group 2)
-    const todoRegex = /\b(TODO|FIX|ADD|REMOVE)(!?)/;
+    const todoRegex = /\b(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(?:\(([^)]+)\))?(!?)::/;
 
     for (const file of files) {
         try {
@@ -99,15 +97,13 @@ async function findTodosInWorkspace(): Promise<TodoItem[]> {
                 
                 if (match) {
                     const type = match[1] as TodoType;
-                    const isImportant = match[2] === "!"; // Checks if "!" exists in Group 2
+                    const scope = match[2];
+                    const isImportant = match[3] === "!";
                     
-                    // 1. Cut off the keyword
                     let cleanText = line.substring(match.index! + match[0].length);
                     
-                    // 2. Remove standard separators (: or space)
                     cleanText = cleanText.replace(/^[:\s]+/, "");
 
-                    // 3. Clean JSON/IPYNB artifacts
                     if (isJsonOrIpynb) {
                         cleanText = cleanText.replace(/\\n/g, "");
                         cleanText = cleanText.replace(/['",]+$/, "");
@@ -118,7 +114,8 @@ async function findTodosInWorkspace(): Promise<TodoItem[]> {
                         line: index + 1,
                         text: cleanText.trim(),
                         important: isImportant,
-                        type: type
+                        type: type,
+                        scope: scope
                     });
                 }
             });
@@ -128,6 +125,24 @@ async function findTodosInWorkspace(): Promise<TodoItem[]> {
     }
 
     return results;
+}
+
+function getIconForType(type: TodoType, important: boolean): vscode.ThemeIcon {
+    const iconColor = important ? new vscode.ThemeColor("list.errorForeground") : undefined;
+
+    switch (type) {
+        case "feat": return new vscode.ThemeIcon("sparkle", iconColor);
+        case "fix": return new vscode.ThemeIcon("bug", iconColor);
+        case "docs": return new vscode.ThemeIcon("book", iconColor);
+        case "style": return new vscode.ThemeIcon("paintcan", iconColor);
+        case "refactor": return new vscode.ThemeIcon("tools", iconColor);
+        case "test": return new vscode.ThemeIcon("beaker", iconColor);
+        case "chore": return new vscode.ThemeIcon("gear", iconColor);
+        case "perf": return new vscode.ThemeIcon("zap", iconColor);
+        case "ci": return new vscode.ThemeIcon("server-process", iconColor);
+        case "build": return new vscode.ThemeIcon("package", iconColor);
+        default: return new vscode.ThemeIcon("checklist", iconColor);
+    }
 }
 
 class TodoTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
@@ -142,7 +157,6 @@ class TodoTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
         if (this.refreshPromise) {
             return this.refreshPromise;
         }
-
         this.refreshPromise = this.doRefresh();
         await this.refreshPromise;
         this.refreshPromise = null;
@@ -167,7 +181,7 @@ class TodoTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
         return element;
     }
 
-    getChildren(): Thenable<vscode.TreeItem[]> {
+    getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
         if (this.isSearching) {
             return Promise.resolve([new SearchingNode("Scanning workspace...")]);
         }
@@ -176,31 +190,56 @@ class TodoTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
             return Promise.resolve([new EmptyNode()]);
         }
 
-        const activeEditor = vscode.window.activeTextEditor;
-        const currentPath = activeEditor?.document.uri.fsPath.toLowerCase() ?? "";
+        if (element instanceof GroupNode) {
+            const nodes = element.items.map(item => new TodoNode(item));
+            return Promise.resolve(nodes);
+        }
 
-        const currentFileTodos = this.items.filter(
-            t => t.fileUri.fsPath.toLowerCase() === currentPath
-        );
-        const otherTodos = this.items.filter(
-            t => t.fileUri.fsPath.toLowerCase() !== currentPath
-        );
+        const groups = new Map<TodoType, TodoItem[]>();
+        for (const item of this.items) {
+            if (!groups.has(item.type)) {
+                groups.set(item.type, []);
+            }
+            groups.get(item.type)!.push(item);
+        }
 
+        const groupOrder: TodoType[] = ["feat", "fix", "refactor", "perf", "style", "test", "docs", "build", "ci", "chore"];
         const nodes: vscode.TreeItem[] = [];
 
-        for (const item of currentFileTodos) {
-            nodes.push(new TodoNode(item));
-        }
-
-        if (currentFileTodos.length > 0 && otherTodos.length > 0) {
-            nodes.push(new SpacerNode());
-        }
-
-        for (const item of otherTodos) {
-            nodes.push(new TodoNode(item));
+        for (const type of groupOrder) {
+            const groupItems = groups.get(type);
+            if (groupItems && groupItems.length > 0) {
+                nodes.push(new GroupNode(type, groupItems));
+            }
         }
 
         return Promise.resolve(nodes);
+    }
+}
+
+class GroupNode extends vscode.TreeItem {
+    constructor(public readonly type: TodoType, public readonly items: TodoItem[]) {
+        super(GroupNode.getGroupLabel(type, items.length), vscode.TreeItemCollapsibleState.Expanded);
+        
+        this.iconPath = getIconForType(type, false);
+        this.contextValue = "group";
+        this.tooltip = `Contains ${items.length} ${type} item(s)`;
+    }
+
+    private static getGroupLabel(type: TodoType, count: number): string {
+        const labels: Record<TodoType, string> = {
+            feat: "Features",
+            fix: "Bug Fixes",
+            docs: "Documentation",
+            style: "Styles",
+            refactor: "Refactors",
+            test: "Tests",
+            chore: "Chores",
+            perf: "Performance",
+            ci: "CI",
+            build: "Builds"
+        };
+        return `${labels[type]} (${count})`;
     }
 }
 
@@ -209,11 +248,12 @@ class TodoNode extends vscode.TreeItem {
         super(`${item.text || "(no description)"}`);
         
         const fileName = path.basename(item.fileUri.fsPath);
+        const scopeText = item.scope ? `(${item.scope}) ` : "";
         
-        this.description = `${item.type} @ ${fileName}:${item.line}`;
-        this.tooltip = `[${item.type}${item.important ? "!" : ""}] ${item.fileUri.fsPath}:${item.line}\n${item.text}`;
+        this.description = `${scopeText}@ ${fileName}:${item.line}`;
+        this.tooltip = `${item.scope ? `(${item.scope.toUpperCase()})` : ""} \n${item.text}\n${item.fileUri.fsPath}:${item.line}`;
 
-        this.iconPath = this.getIconForType(item.type, item.important);
+        this.iconPath = getIconForType(item.type, item.important);
 
         this.command = {
             command: "vscode.open",
@@ -223,30 +263,6 @@ class TodoNode extends vscode.TreeItem {
                 { selection: new vscode.Range(item.line - 1, 0, item.line - 1, 0) }
             ]
         };
-    }
-
-    private getIconForType(type: TodoType, important: boolean): vscode.ThemeIcon {
-        // If important, color the icon Red ("list.errorForeground")
-        const iconColor = important ? new vscode.ThemeColor("list.errorForeground") : undefined;
-
-        switch (type) {
-            case "FIX":
-                return new vscode.ThemeIcon("bug", iconColor);
-            case "ADD":
-                return new vscode.ThemeIcon("diff-added", iconColor);
-            case "REMOVE":
-                return new vscode.ThemeIcon("diff-removed", iconColor);
-            case "TODO":
-            default:
-                return new vscode.ThemeIcon("checklist", iconColor);
-        }
-    }
-}
-
-class SpacerNode extends vscode.TreeItem {
-    constructor() {
-        super("──────────", vscode.TreeItemCollapsibleState.None);
-        this.contextValue = "spacer";
     }
 }
 

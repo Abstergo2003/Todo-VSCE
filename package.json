@@ -2,7 +2,7 @@
   "name": "abstergoodos",
   "displayName": "Todos##",
   "description": "Best way to save and view your todos",
-  "version": "1.6.0",
+  "version": "2.0.0",
   "engines": {
     "vscode": "^1.106.0"
   },
@@ -24,7 +24,7 @@
         {
           "id": "myTodoView",
           "name": "TODO View",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
@@ -33,7 +33,7 @@
         {
           "id": "myTODOContainer",
           "title": "TODO Panel",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
