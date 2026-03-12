@@ -102,7 +102,7 @@ async function findTodosInWorkspace(): Promise<TodoItem[]> {
                     
                     let cleanText = line.substring(match.index! + match[0].length);
                     
-                    cleanText = cleanText.replace(/^[:\s]+/, "");
+                    cleanText = stripCommentClosings(cleanText.replace(/^[:\s]+/, ""));
 
                     if (isJsonOrIpynb) {
                         cleanText = cleanText.replace(/\\n/g, "");
@@ -280,4 +280,37 @@ class EmptyNode extends vscode.TreeItem {
         this.iconPath = new vscode.ThemeIcon("check-all");
         this.contextValue = "empty";
     }
+}
+
+function stripCommentClosings(text: string): string {
+    const closingTags = [
+        "*/",   // C, C++, Java, JS, TS, CSS, SQL
+        "-->",  // HTML, XML, Markdown
+        '"""',  // Python (docstrings)
+        "'''",  // Python (docstrings)
+        "=#",   // Julia (wielolinijkowe)
+        "=end", // Ruby
+        "#>",   // PowerShell
+        "-}",   // Haskell
+        "*)",   // Pascal, Delphi, F#
+        "%}",   // MATLAB
+        "|#"    // Lisp, Clojure
+    ];
+
+    let earliestCutIndex = -1;
+
+    for (const tag of closingTags) {
+        const index = text.indexOf(tag);
+        if (index !== -1) {
+            if (earliestCutIndex === -1 || index < earliestCutIndex) {
+                earliestCutIndex = index;
+            }
+        }
+    }
+
+    if (earliestCutIndex !== -1) {
+        return text.substring(0, earliestCutIndex).trim();
+    }
+
+    return text.trim();
 }
